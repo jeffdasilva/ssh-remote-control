@@ -1,6 +1,3 @@
-
-
-
 # SSH Remote Control Dashboard
 
 A Python web application for monitoring and controlling remote servers via SSH. Built with FastAPI, AsyncSSH, and modern Python tooling.

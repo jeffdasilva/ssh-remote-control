@@ -17,6 +17,7 @@ from pydantic import BaseModel
 
 from . import __version__
 from .config import Settings
+from .logging_config import setup_logging
 from .server import SSHConnectionManager
 
 logger = logging.getLogger(__name__)
@@ -165,6 +166,12 @@ class ConnectionManager:
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
     settings = Settings()
+
+    # Setup logging
+    setup_logging(
+        log_level=settings.log_level.upper(),
+        log_dir="logs",
+    )
 
     @asynccontextmanager
     async def lifespan(fastapi_app: FastAPI) -> AsyncGenerator[None]:

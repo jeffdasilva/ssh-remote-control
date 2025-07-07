@@ -121,6 +121,17 @@ module = "tests.*"
 # Allow some relaxed rules for test files while still maintaining type safety
 warn_unused_ignores = false
 
+# Special handling for logging config due to strict typing issues with logging module
+[[tool.mypy.overrides]]
+module = "ssh_remote_control.logging_config"
+warn_unused_ignores = false
+disable_error_code = ["misc"]
+
+# Special handling for web_server due to logging setup
+[[tool.mypy.overrides]]
+module = "ssh_remote_control.web_server"
+warn_unused_ignores = false
+
 [tool.pytest.ini_options]
 minversion = "7.0"
 addopts = "-ra -q --strict-markers --cov=src/ssh_remote_control --cov-report=term-missing"

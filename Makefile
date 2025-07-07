@@ -234,6 +234,8 @@ clean: ## Clean up build artifacts and cache
 	rm -rf .mypy_cache/
 	rm -rf .ruff_cache/
 	rm -rf bandit-report.json
+	rm -rf logs/
+	rm -f *.log
 	find . -type d -name __pycache__ -exec rm -rf {} +
 	find . -type f -name "*.pyc" -delete
 	@echo "$(GREEN)✅ Cleanup completed$(NC)"
