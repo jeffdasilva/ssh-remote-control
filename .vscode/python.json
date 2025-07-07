@@ -1,0 +1,65 @@
+{
+  "SSH Remote Control - Async Function": {
+    "prefix": "async-func",
+    "body": [
+      "async def ${1:function_name}(${2:parameters}) -> ${3:return_type}:",
+      "    \"\"\"${4:Function description}.\"\"\"",
+      "    ${5:pass}"
+    ],
+    "description": "Create an async function with proper typing"
+  },
+  "SSH Remote Control - Test Function": {
+    "prefix": "test-func",
+    "body": [
+      "def test_${1:function_name}():",
+      "    \"\"\"Test ${2:description}.\"\"\"",
+      "    ${3:pass}"
+    ],
+    "description": "Create a test function"
+  },
+  "SSH Remote Control - Async Test Function": {
+    "prefix": "async-test-func",
+    "body": [
+      "@pytest.mark.asyncio",
+      "async def test_${1:function_name}():",
+      "    \"\"\"Test ${2:description}.\"\"\"",
+      "    ${3:pass}"
+    ],
+    "description": "Create an async test function"
+  },
+  "SSH Remote Control - Logger": {
+    "prefix": "logger",
+    "body": [
+      "logger = logging.getLogger(__name__)"
+    ],
+    "description": "Create a logger instance"
+  },
+  "SSH Remote Control - Exception Handler": {
+    "prefix": "try-except",
+    "body": [
+      "try:",
+      "    ${1:code}",
+      "except (${2:ConnectionError}, ${3:OSError}) as e:",
+      "    logger.error(\"${4:Error message}: %s\", e)",
+      "    ${5:pass}"
+    ],
+    "description": "Create a try-except block with specific exceptions"
+  },
+  "SSH Remote Control - Type Annotations": {
+    "prefix": "type-import",
+    "body": [
+      "from typing import Any, Dict, List, Optional, Union"
+    ],
+    "description": "Import common type annotations"
+  },
+  "SSH Remote Control - Pydantic Model": {
+    "prefix": "pydantic-model",
+    "body": [
+      "class ${1:ModelName}(BaseModel):",
+      "    \"\"\"${2:Model description}.\"\"\"",
+      "    ",
+      "    ${3:field_name}: ${4:field_type}"
+    ],
+    "description": "Create a Pydantic model"
+  }
+}

@@ -1,0 +1,49 @@
+[
+    {
+        "key": "ctrl+f5",
+        "command": "workbench.action.debug.start",
+        "when": "!inDebugMode && resourcePath =~ /test_.*\\.py$/",
+        "args": {
+            "name": "Python: Run Current Test File"
+        }
+    },
+    {
+        "key": "ctrl+f5",
+        "command": "workbench.action.debug.start",
+        "when": "!inDebugMode && !(resourcePath =~ /test_.*\\.py$/)",
+        "args": {
+            "name": "Python: Run Tests"
+        }
+    },
+    {
+        "key": "ctrl+shift+f5",
+        "command": "workbench.action.debug.start",
+        "when": "!inDebugMode && resourcePath =~ /test_.*\\.py$/",
+        "args": {
+            "name": "Python: Debug Current Test File"
+        }
+    },
+    {
+        "key": "ctrl+shift+f5",
+        "command": "workbench.action.debug.start",
+        "when": "!inDebugMode && !(resourcePath =~ /test_.*\\.py$/)",
+        "args": {
+            "name": "Python: Debug Tests"
+        }
+    },
+    {
+        "key": "f5",
+        "command": "workbench.action.debug.start",
+        "when": "!inDebugMode"
+    },
+    {
+        "key": "ctrl+shift+t",
+        "command": "workbench.action.tasks.runTask",
+        "args": "Run Tests"
+    },
+    {
+        "key": "ctrl+shift+c",
+        "command": "workbench.action.tasks.runTask",
+        "args": "Run CI"
+    }
+]

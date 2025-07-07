@@ -1,0 +1,135 @@
+{
+    // Python settings
+    "python.defaultInterpreterPath": "./.venv/bin/python",
+    "python.terminal.activateEnvironment": true,
+    "python.analysis.autoImportCompletions": true,
+    "python.analysis.typeCheckingMode": "strict",
+    "python.analysis.extraPaths": [
+        "./src"
+    ],
+    "python.analysis.include": [
+        "src",
+        "tests"
+    ],
+    "python.linting.enabled": true,
+    "python.linting.pylintEnabled": true,
+    "python.linting.mypyEnabled": true,
+    "python.linting.ruffEnabled": true,
+    "python.formatting.provider": "none",
+    "python.linting.lintOnSave": true,
+    "python.analysis.autoFormatStrings": true,
+    // Test discovery and running
+    "python.testing.pytestEnabled": true,
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestArgs": [
+        "tests/",
+        "--verbose"
+    ],
+    "python.testing.autoTestDiscoverOnSaveEnabled": true,
+    "python.testing.cwd": "${workspaceFolder}",
+    // File associations
+    "files.associations": {
+        "*.toml": "toml",
+        "Dockerfile*": "dockerfile"
+    },
+    // Editor settings
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+        "source.organizeImports": "explicit",
+        "source.fixAll.ruff": "explicit"
+    },
+    "editor.rulers": [
+        88
+    ],
+    "editor.wordWrap": "bounded",
+    "editor.wordWrapColumn": 88,
+    // Terminal settings
+    "terminal.integrated.defaultProfile.linux": "bash",
+    "terminal.integrated.cwd": "${workspaceFolder}",
+    // GitHub Copilot settings
+    "github.copilot.enable": {
+        "*": true,
+        "yaml": true,
+        "plaintext": true,
+        "markdown": true,
+        "python": true
+    },
+    "github.copilot.chat.followUps": "off",
+    "github.copilot.chat.localeOverride": "en",
+    // Language-specific settings
+    "[python]": {
+        "editor.defaultFormatter": null,
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+            "source.organizeImports": "explicit",
+            "source.fixAll.ruff": "explicit"
+        },
+        "editor.tabSize": 4,
+        "editor.insertSpaces": true
+    },
+    "[yaml]": {
+        "editor.defaultFormatter": null,
+        "editor.tabSize": 2,
+        "editor.insertSpaces": true
+    },
+    "[json]": {
+        "editor.defaultFormatter": "vscode.json-language-features",
+        "editor.tabSize": 2,
+        "editor.insertSpaces": true
+    },
+    "[toml]": {
+        "editor.defaultFormatter": null,
+        "editor.tabSize": 2,
+        "editor.insertSpaces": true
+    },
+    "[markdown]": {
+        "editor.defaultFormatter": null,
+        "editor.wordWrap": "on",
+        "editor.quickSuggestions": {
+            "comments": "off",
+            "strings": "off",
+            "other": "off"
+        }
+    },
+    // Workspace-specific settings
+    "files.exclude": {
+        "**/__pycache__": true,
+        "**/.pytest_cache": true,
+        "**/.mypy_cache": true,
+        "**/.ruff_cache": true,
+        "**/htmlcov": true,
+        "**/.coverage": true,
+        "**/bandit-report.json": true,
+        "**/*.egg-info": true,
+        "**/uv.lock": false
+    },
+    "search.exclude": {
+        "**/__pycache__": true,
+        "**/.pytest_cache": true,
+        "**/.mypy_cache": true,
+        "**/.ruff_cache": true,
+        "**/htmlcov": true,
+        "**/.venv": true,
+        "**/node_modules": true
+    },
+    // Git settings
+    "git.autofetch": true,
+    "git.confirmSync": false,
+    "git.enableSmartCommit": true,
+    // IntelliSense settings
+    "python.analysis.completeFunctionParens": true,
+    "python.analysis.importFormat": "absolute",
+    "python.analysis.stubPath": ".venv/lib/python3.12/site-packages",
+    // Problems panel
+    "problems.decorations.enabled": true,
+    "problems.showCurrentInStatus": true,
+    // SSH Remote Control specific settings
+    "yaml.schemas": {
+        "file:///schema.json": [
+            "config.yaml",
+            "config.yml"
+        ]
+    },
+    // Extension recommendations
+    "extensions.ignoreRecommendations": false
+}

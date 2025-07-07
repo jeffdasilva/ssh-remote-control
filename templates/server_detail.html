@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ server_name }} - SSH Remote Control</title>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.10/dist/ext/ws.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .terminal {
+            background-color: #1a1a1a;
+            color: #00ff00;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.4;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            max-height: 400px;
+            padding: 12px;
+            border-radius: 8px;
+        }
+        .log-container {
+            background-color: #1a1a1a;
+            color: #ffffff;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            line-height: 1.3;
+            max-height: 300px;
+            overflow-y: auto;
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid #333;
+        }
+        .log-line {
+            padding: 2px 0;
+            border-bottom: 1px solid #333;
+        }
+        .log-line:last-child {
+            border-bottom: none;
+        }
+        .command-input {
+            font-family: 'Courier New', monospace;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .tab-button {
+            transition: all 0.3s ease;
+        }
+        .tab-button.active {
+            background-color: #3b82f6;
+            color: white;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <header class="mb-8">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h1 class="text-4xl font-bold text-gray-800 mb-2">{{ server_name }}</h1>
+                    <p class="text-gray-600">{{ server_config.host }}:{{ server_config.port }}</p>
+                </div>
+                <div class="flex space-x-4">
+                    <button 
+                        onclick="refreshSystemInfo()"
+                        class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors">
+                        Refresh Info
+                    </button>
+                    <a href="/" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg transition-colors">
+                        Back to Dashboard
+                    </a>
+                </div>
+            </div>
+        </header>
+
+        <!-- Tab Navigation -->
+        <div class="mb-6">
+            <nav class="flex space-x-1 bg-gray-200 p-1 rounded-lg">
+                <button 
+                    onclick="switchTab('overview')"
+                    class="tab-button flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors active"
+                    id="overview-tab">
+                    Overview
+                </button>
+                <button 
+                    onclick="switchTab('terminal')"
+                    class="tab-button flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors"
+                    id="terminal-tab">
+                    Terminal
+                </button>
+                <button 
+                    onclick="switchTab('logs')"
+                    class="tab-button flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors"
+                    id="logs-tab">
+                    Logs
+                </button>
+            </nav>
+        </div>
+
+        <!-- Overview Tab -->
+        <div id="overview-content" class="tab-content active">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div class="bg-white rounded-lg shadow-md p-6">
+                    <h2 class="text-xl font-semibold text-gray-800 mb-4">System Information</h2>
+                    <div id="system-info" class="space-y-2">
+                        <div class="flex justify-center">
+                            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="bg-white rounded-lg shadow-md p-6">
+                    <h2 class="text-xl font-semibold text-gray-800 mb-4">Quick Actions</h2>
+                    <div class="space-y-2">
+                        <button 
+                            onclick="executeQuickCommand('df -h')"
+                            class="w-full text-left px-4 py-2 bg-gray-50 hover:bg-gray-100 rounded-md transition-colors">
+                            Check Disk Usage
+                        </button>
+                        <button 
+                            onclick="executeQuickCommand('free -h')"
+                            class="w-full text-left px-4 py-2 bg-gray-50 hover:bg-gray-100 rounded-md transition-colors">
+                            Check Memory Usage
+                        </button>
+                        <button 
+                            onclick="executeQuickCommand('ps aux | head -10')"
+                            class="w-full text-left px-4 py-2 bg-gray-50 hover:bg-gray-100 rounded-md transition-colors">
+                            Top Processes
+                        </button>
+                        <button 
+                            onclick="executeQuickCommand('netstat -tlnp')"
+                            class="w-full text-left px-4 py-2 bg-gray-50 hover:bg-gray-100 rounded-md transition-colors">
+                            Network Connections
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Terminal Tab -->
+        <div id="terminal-content" class="tab-content">
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h2 class="text-xl font-semibold text-gray-800 mb-4">Terminal</h2>
+                <div class="space-y-4">
+                    <div class="flex space-x-2">
+                        <input 
+                            type="text" 
+                            id="command-input"
+                            class="command-input flex-1 px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            placeholder="Enter command..."
+                            onkeypress="handleCommandInput(event)">
+                        <button 
+                            onclick="executeCommand()"
+                            class="bg-green-500 hover:bg-green-600 text-white px-6 py-2 rounded-md transition-colors">
+                            Execute
+                        </button>
+                    </div>
+                    <div id="terminal-output" class="terminal min-h-[400px]">
+                        Welcome to {{ server_name }} terminal
+                        Type commands above and press Enter to execute
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Logs Tab -->
+        <div id="logs-content" class="tab-content">
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h2 class="text-xl font-semibold text-gray-800 mb-4">Log Files</h2>
+                <div class="space-y-4">
+                    <div class="flex space-x-2">
+                        <select id="log-file-select" class="flex-1 px-4 py-2 border border-gray-300 rounded-md">
+                            <option value="">Select a log file...</option>
+                            {% for log_file in log_files %}
+                            <option value="{{ log_file }}">{{ log_file }}</option>
+                            {% endfor %}
+                        </select>
+                        <button 
+                            onclick="startLogTail()"
+                            class="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-md transition-colors">
+                            Start Tail
+                        </button>
+                        <button 
+                            onclick="stopLogTail()"
+                            class="bg-red-500 hover:bg-red-600 text-white px-6 py-2 rounded-md transition-colors">
+                            Stop Tail
+                        </button>
+                    </div>
+                    <div id="log-output" class="log-container min-h-[400px]">
+                        Select a log file and click "Start Tail" to begin monitoring
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let websocket = null;
+        let currentLogFile = null;
+
+        // Initialize WebSocket connection
+        function initWebSocket() {
+            const wsUrl = `ws://${window.location.host}/ws/{{ server_name }}`;
+            websocket = new WebSocket(wsUrl);
+            
+            websocket.onopen = function(event) {
+                console.log('WebSocket connected');
+            };
+            
+            websocket.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+                handleWebSocketMessage(data);
+            };
+            
+            websocket.onclose = function(event) {
+                console.log('WebSocket disconnected');
+                setTimeout(initWebSocket, 3000); // Reconnect after 3 seconds
+            };
+            
+            websocket.onerror = function(error) {
+                console.error('WebSocket error:', error);
+            };
+        }
+
+        function handleWebSocketMessage(data) {
+            switch (data.type) {
+                case 'log_line':
+                    addLogLine(data.line);
+                    break;
+                case 'command_output':
+                    addTerminalOutput(`$ ${data.command}\n${data.output}`);
+                    break;
+                case 'error':
+                    addTerminalOutput(`Error: ${data.message}`);
+                    break;
+            }
+        }
+
+        function switchTab(tabName) {
+            // Hide all tab contents
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            
+            // Remove active class from all tab buttons
+            document.querySelectorAll('.tab-button').forEach(button => {
+                button.classList.remove('active');
+            });
+            
+            // Show selected tab content
+            document.getElementById(tabName + '-content').classList.add('active');
+            document.getElementById(tabName + '-tab').classList.add('active');
+        }
+
+        async function refreshSystemInfo() {
+            try {
+                const response = await fetch(`/api/servers/{{ server_name }}/info`);
+                const data = await response.json();
+                
+                const infoDiv = document.getElementById('system-info');
+                infoDiv.innerHTML = '';
+                
+                Object.entries(data.info).forEach(([key, value]) => {
+                    const div = document.createElement('div');
+                    div.className = 'flex justify-between py-2 border-b border-gray-200 last:border-b-0';
+                    div.innerHTML = `
+                        <span class="font-medium text-gray-700">${key.replace('_', ' ').toUpperCase()}:</span>
+                        <span class="text-gray-600 text-right">${value}</span>
+                    `;
+                    infoDiv.appendChild(div);
+                });
+                
+            } catch (error) {
+                console.error('Error refreshing system info:', error);
+            }
+        }
+
+        function executeQuickCommand(command) {
+            if (websocket && websocket.readyState === WebSocket.OPEN) {
+                websocket.send(JSON.stringify({
+                    type: 'execute_command',
+                    command: command
+                }));
+            }
+        }
+
+        function handleCommandInput(event) {
+            if (event.key === 'Enter') {
+                executeCommand();
+            }
+        }
+
+        function executeCommand() {
+            const input = document.getElementById('command-input');
+            const command = input.value.trim();
+            
+            if (command && websocket && websocket.readyState === WebSocket.OPEN) {
+                websocket.send(JSON.stringify({
+                    type: 'execute_command',
+                    command: command
+                }));
+                
+                input.value = '';
+            }
+        }
+
+        function addTerminalOutput(output) {
+            const terminal = document.getElementById('terminal-output');
+            terminal.textContent += '\n' + output;
+            terminal.scrollTop = terminal.scrollHeight;
+        }
+
+        function startLogTail() {
+            const select = document.getElementById('log-file-select');
+            const logFile = select.value;
+            
+            if (!logFile) {
+                alert('Please select a log file');
+                return;
+            }
+            
+            if (websocket && websocket.readyState === WebSocket.OPEN) {
+                // Stop current tail if any
+                if (currentLogFile) {
+                    websocket.send(JSON.stringify({
+                        type: 'stop_log_tail',
+                        file_path: currentLogFile
+                    }));
+                }
+                
+                // Clear log output
+                document.getElementById('log-output').innerHTML = '';
+                
+                // Start new tail
+                websocket.send(JSON.stringify({
+                    type: 'start_log_tail',
+                    file_path: logFile
+                }));
+                
+                currentLogFile = logFile;
+            }
+        }
+
+        function stopLogTail() {
+            if (currentLogFile && websocket && websocket.readyState === WebSocket.OPEN) {
+                websocket.send(JSON.stringify({
+                    type: 'stop_log_tail',
+                    file_path: currentLogFile
+                }));
+                
+                currentLogFile = null;
+            }
+        }
+
+        function addLogLine(line) {
+            const logOutput = document.getElementById('log-output');
+            const logLine = document.createElement('div');
+            logLine.className = 'log-line';
+            logLine.textContent = line;
+            logOutput.appendChild(logLine);
+            logOutput.scrollTop = logOutput.scrollHeight;
+        }
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            initWebSocket();
+            refreshSystemInfo();
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SSH Remote Control Dashboard</title>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.10/dist/ext/ws.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .terminal {
+            background-color: #1a1a1a;
+            color: #00ff00;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.4;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .server-card {
+            transition: all 0.3s ease;
+        }
+        .server-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+        }
+        .status-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+        }
+        .status-connected {
+            background-color: #10b981;
+        }
+        .status-disconnected {
+            background-color: #ef4444;
+        }
+        .log-line {
+            padding: 2px 0;
+            border-bottom: 1px solid #333;
+        }
+        .log-line:hover {
+            background-color: #2a2a2a;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <header class="mb-8">
+            <h1 class="text-4xl font-bold text-gray-800 mb-2">SSH Remote Control Dashboard</h1>
+            <p class="text-gray-600">Monitor and control your remote servers</p>
+        </header>
+
+        <div class="mb-6">
+            <button 
+                hx-get="/api/servers" 
+                hx-target="#servers-grid" 
+                hx-swap="innerHTML"
+                hx-trigger="click, load"
+                class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors">
+                Refresh Servers
+            </button>
+        </div>
+
+        <div id="servers-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <!-- Server cards will be loaded here -->
+        </div>
+    </div>
+
+    <script>
+        // Auto-refresh server status every 30 seconds
+        setInterval(() => {
+            htmx.trigger('#servers-grid', 'refresh');
+        }, 30000);
+
+        // Handle server connection actions
+        document.addEventListener('htmx:afterRequest', function(evt) {
+            if (evt.detail.xhr.status === 200 && evt.detail.target.id === 'servers-grid') {
+                // Update server cards with fresh data
+                const serversData = JSON.parse(evt.detail.xhr.responseText);
+                updateServerCards(serversData.servers);
+            }
+        });
+
+        function updateServerCards(servers) {
+            const grid = document.getElementById('servers-grid');
+            grid.innerHTML = '';
+            
+            servers.forEach(server => {
+                const card = createServerCard(server);
+                grid.appendChild(card);
+            });
+        }
+
+        function createServerCard(server) {
+            const card = document.createElement('div');
+            card.className = 'server-card bg-white rounded-lg shadow-md p-6 border-l-4 border-blue-500';
+            
+            const statusClass = server.connected ? 'status-connected' : 'status-disconnected';
+            const statusText = server.connected ? 'Connected' : 'Disconnected';
+            const actionButton = server.connected ? 
+                `<button onclick="disconnectServer('${server.name}')" class="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-sm">Disconnect</button>` :
+                `<button onclick="connectServer('${server.name}')" class="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-sm">Connect</button>`;
+            
+            card.innerHTML = `
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-xl font-semibold text-gray-800">${server.name}</h3>
+                    <div class="flex items-center">
+                        <span class="status-indicator ${statusClass}"></span>
+                        <span class="text-sm text-gray-600">${statusText}</span>
+                    </div>
+                </div>
+                <div class="text-gray-600 mb-4">
+                    <p><strong>Host:</strong> ${server.host}:${server.port}</p>
+                    <p><strong>User:</strong> ${server.username}</p>
+                </div>
+                <div class="flex space-x-2">
+                    ${actionButton}
+                    <a href="/server/${server.name}" class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-sm">Details</a>
+                </div>
+            `;
+            
+            return card;
+        }
+
+        async function connectServer(serverName) {
+            try {
+                const response = await fetch(`/api/servers/${serverName}/connect`, {
+                    method: 'POST'
+                });
+                
+                if (response.ok) {
+                    // Refresh server list
+                    htmx.trigger('#servers-grid', 'refresh');
+                } else {
+                    alert('Failed to connect to server');
+                }
+            } catch (error) {
+                alert('Error connecting to server: ' + error.message);
+            }
+        }
+
+        async function disconnectServer(serverName) {
+            try {
+                const response = await fetch(`/api/servers/${serverName}/disconnect`, {
+                    method: 'POST'
+                });
+                
+                if (response.ok) {
+                    // Refresh server list
+                    htmx.trigger('#servers-grid', 'refresh');
+                } else {
+                    alert('Failed to disconnect from server');
+                }
+            } catch (error) {
+                alert('Error disconnecting from server: ' + error.message);
+            }
+        }
+    </script>
+</body>
+</html>

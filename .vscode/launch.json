@@ -1,0 +1,145 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: Run Tests",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "pytest",
+            "args": [
+                "tests/",
+                "-v"
+            ],
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/src"
+            },
+            "stopOnEntry": false,
+            "presentation": {
+                "hidden": false,
+                "group": "Tests",
+                "order": 1
+            }
+        },
+        {
+            "name": "Python: Run Current Test File",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "pytest",
+            "args": [
+                "${file}",
+                "-v"
+            ],
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/src"
+            },
+            "stopOnEntry": false,
+            "presentation": {
+                "hidden": false,
+                "group": "Tests",
+                "order": 1
+            }
+        },
+        {
+            "name": "Python: Run CLI",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "ssh_remote_control.cli",
+            "args": [
+                "--help"
+            ],
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/src"
+            },
+            "stopOnEntry": false,
+            "presentation": {
+                "hidden": false,
+                "group": "CLI",
+                "order": 2
+            }
+        },
+        {
+            "name": "Python: Run Web Server",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "ssh_remote_control.web_server",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/src"
+            },
+            "stopOnEntry": false,
+            "presentation": {
+                "hidden": false,
+                "group": "Web Server",
+                "order": 3
+            }
+        },
+        {
+            "name": "Python: Debug Tests",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "pytest",
+            "args": [
+                "tests/",
+                "-v",
+                "--tb=short"
+            ],
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/src"
+            },
+            "stopOnEntry": false,
+            "presentation": {
+                "hidden": false,
+                "group": "Tests",
+                "order": 1
+            }
+        },
+        {
+            "name": "Python: Debug Current Test File",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "pytest",
+            "args": [
+                "${file}",
+                "-v",
+                "--tb=short"
+            ],
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/src"
+            },
+            "stopOnEntry": false,
+            "presentation": {
+                "hidden": false,
+                "group": "Tests",
+                "order": 1
+            }
+        },
+        {
+            "name": "Python: Debug Current File",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/src"
+            },
+            "stopOnEntry": false,
+            "presentation": {
+                "hidden": false,
+                "group": "Debug",
+                "order": 4
+            }
+        }
+    ]
+}

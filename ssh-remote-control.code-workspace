@@ -1,0 +1,26 @@
+{
+    "folders": [
+        {
+            "path": "."
+        }
+    ],
+    "settings": {
+        "python.pythonPath": "./.venv/bin/python"
+    },
+    "extensions": {
+        "recommendations": [
+            "ms-python.python",
+            "ms-python.vscode-pylance",
+            "ms-python.debugpy",
+            "charliermarsh.ruff",
+            "ms-python.mypy-type-checker",
+            "GitHub.copilot",
+            "GitHub.copilot-chat",
+            "redhat.vscode-yaml",
+            "tamasfe.even-better-toml",
+            "yzhang.markdown-all-in-one",
+            "ms-vscode.makefile-tools",
+            "ms-azuretools.vscode-docker"
+        ]
+    }
+}
