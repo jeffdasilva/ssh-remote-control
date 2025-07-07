@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -18,13 +19,16 @@
             white-space: pre-wrap;
             word-wrap: break-word;
         }
+
         .server-card {
             transition: all 0.3s ease;
         }
+
         .server-card:hover {
             transform: translateY(-2px);
             box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
         }
+
         .status-indicator {
             width: 10px;
             height: 10px;
@@ -32,22 +36,89 @@
             display: inline-block;
             margin-right: 8px;
         }
+
         .status-connected {
             background-color: #10b981;
         }
+
         .status-disconnected {
             background-color: #ef4444;
         }
+
         .log-line {
             padding: 2px 0;
             border-bottom: 1px solid #333;
         }
+
         .log-line:hover {
             background-color: #2a2a2a;
         }
+
+        /* Toast notification styles */
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 16px 24px;
+            border-radius: 8px;
+            color: white;
+            font-weight: 500;
+            z-index: 1000;
+            transform: translateX(100%);
+            transition: transform 0.3s ease;
+            max-width: 400px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+
+        .toast.show {
+            transform: translateX(0);
+        }
+
+        .toast.success {
+            background-color: #10b981;
+        }
+
+        .toast.error {
+            background-color: #ef4444;
+        }
+
+        .toast.info {
+            background-color: #3b82f6;
+        }
+
+        /* Loading spinner */
+        .spinner {
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #3498db;
+            border-radius: 50%;
+            width: 16px;
+            height: 16px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            margin-right: 8px;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        .btn-loading {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
     </style>
 </head>
+
 <body class="bg-gray-100 min-h-screen">
+    <!-- Toast container -->
+    <div id="toast-container"></div>
+
     <div class="container mx-auto px-4 py-8">
         <header class="mb-8">
             <h1 class="text-4xl font-bold text-gray-800 mb-2">SSH Remote Control Dashboard</h1>
@@ -55,13 +126,9 @@
         </header>
 
         <div class="mb-6">
-            <button 
-                hx-get="/api/servers" 
-                hx-target="#servers-grid" 
-                hx-swap="innerHTML"
-                hx-trigger="click, load"
+            <button id="refresh-btn" onclick="refreshServers()"
                 class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors">
-                Refresh Servers
+                <span class="btn-text">Refresh Servers</span>
             </button>
         </div>
 
@@ -71,24 +138,101 @@
     </div>
 
     <script>
-        // Auto-refresh server status every 30 seconds
-        setInterval(() => {
-            htmx.trigger('#servers-grid', 'refresh');
-        }, 30000);
+        // Toast notification system
+        function showToast(message, type = 'info') {
+            const toastContainer = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.innerHTML = `
+                <div class="flex items-center justify-between">
+                    <span>${message}</span>
+                    <button onclick="closeToast(this)" class="ml-4 text-white hover:text-gray-200">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+            `;
 
-        // Handle server connection actions
-        document.addEventListener('htmx:afterRequest', function(evt) {
-            if (evt.detail.xhr.status === 200 && evt.detail.target.id === 'servers-grid') {
-                // Update server cards with fresh data
-                const serversData = JSON.parse(evt.detail.xhr.responseText);
-                updateServerCards(serversData.servers);
+            toastContainer.appendChild(toast);
+
+            // Show toast
+            setTimeout(() => toast.classList.add('show'), 100);
+
+            // Auto-remove after 5 seconds
+            setTimeout(() => {
+                if (toast.parentNode) {
+                    closeToast(toast);
+                }
+            }, 5000);
+        }
+
+        function closeToast(element) {
+            const toast = element.classList.contains('toast') ? element : element.closest('.toast');
+            if (toast) {
+                toast.classList.remove('show');
+                setTimeout(() => {
+                    if (toast.parentNode) {
+                        toast.parentNode.removeChild(toast);
+                    }
+                }, 300);
             }
-        });
+        }
+
+        // Loading state management
+        function setButtonLoading(buttonId, loading = true) {
+            const button = document.getElementById(buttonId);
+            if (!button) return;
+
+            if (loading) {
+                button.classList.add('btn-loading');
+                button.disabled = true;
+                const text = button.querySelector('.btn-text');
+                if (text) {
+                    text.innerHTML = '<span class="spinner"></span>Loading...';
+                }
+            } else {
+                button.classList.remove('btn-loading');
+                button.disabled = false;
+                const text = button.querySelector('.btn-text');
+                if (text) {
+                    text.innerHTML = 'Refresh Servers';
+                }
+            }
+        }
+
+        // Enhanced server refresh function
+        async function refreshServers() {
+            setButtonLoading('refresh-btn', true);
+            showToast('Refreshing server status...', 'info');
+
+            try {
+                const response = await fetch('/api/servers');
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                updateServerCards(data.servers);
+                showToast('Server status updated successfully', 'success');
+            } catch (error) {
+                console.error('Error refreshing servers:', error);
+                showToast(`Failed to refresh servers: ${error.message}`, 'error');
+            } finally {
+                setButtonLoading('refresh-btn', false);
+            }
+        }
+
+        // Auto-refresh server status every 30 seconds
+        setInterval(refreshServers, 30000);
+
+        // Load servers on page load
+        document.addEventListener('DOMContentLoaded', refreshServers);
 
         function updateServerCards(servers) {
             const grid = document.getElementById('servers-grid');
             grid.innerHTML = '';
-            
+
             servers.forEach(server => {
                 const card = createServerCard(server);
                 grid.appendChild(card);
@@ -98,13 +242,17 @@
         function createServerCard(server) {
             const card = document.createElement('div');
             card.className = 'server-card bg-white rounded-lg shadow-md p-6 border-l-4 border-blue-500';
-            
+
             const statusClass = server.connected ? 'status-connected' : 'status-disconnected';
             const statusText = server.connected ? 'Connected' : 'Disconnected';
-            const actionButton = server.connected ? 
-                `<button onclick="disconnectServer('${server.name}')" class="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-sm">Disconnect</button>` :
-                `<button onclick="connectServer('${server.name}')" class="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-sm">Connect</button>`;
-            
+            const actionButton = server.connected ?
+                `<button onclick="disconnectServer('${server.name}')" class="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-sm transition-colors">
+                    <span class="btn-text">Disconnect</span>
+                </button>` :
+                `<button onclick="connectServer('${server.name}')" class="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-sm transition-colors">
+                    <span class="btn-text">Connect</span>
+                </button>`;
+
             card.innerHTML = `
                 <div class="flex items-center justify-between mb-4">
                     <h3 class="text-xl font-semibold text-gray-800">${server.name}</h3>
@@ -119,46 +267,92 @@
                 </div>
                 <div class="flex space-x-2">
                     ${actionButton}
-                    <a href="/server/${server.name}" class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-sm">Details</a>
+                    <a href="/server/${server.name}" class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-sm transition-colors">Details</a>
                 </div>
             `;
-            
+
             return card;
         }
 
+        function setServerButtonLoading(serverName, action, loading = true) {
+            const buttons = document.querySelectorAll(`button[onclick="${action}('${serverName}')"]`);
+            buttons.forEach(button => {
+                if (loading) {
+                    button.classList.add('btn-loading');
+                    button.disabled = true;
+                    const text = button.querySelector('.btn-text');
+                    if (text) {
+                        text.innerHTML = '<span class="spinner"></span>Processing...';
+                    }
+                } else {
+                    button.classList.remove('btn-loading');
+                    button.disabled = false;
+                    const text = button.querySelector('.btn-text');
+                    if (text) {
+                        text.innerHTML = action === 'connectServer' ? 'Connect' : 'Disconnect';
+                    }
+                }
+            });
+        }
+
         async function connectServer(serverName) {
+            setServerButtonLoading(serverName, 'connectServer', true);
+            showToast(`Connecting to ${serverName}...`, 'info');
+
             try {
                 const response = await fetch(`/api/servers/${serverName}/connect`, {
-                    method: 'POST'
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
                 });
-                
-                if (response.ok) {
-                    // Refresh server list
-                    htmx.trigger('#servers-grid', 'refresh');
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showToast(data.message, 'success');
+                    // Refresh server list to update status
+                    await refreshServers();
                 } else {
-                    alert('Failed to connect to server');
+                    showToast(data.message || 'Failed to connect to server', 'error');
                 }
             } catch (error) {
-                alert('Error connecting to server: ' + error.message);
+                console.error('Error connecting to server:', error);
+                showToast(`Connection error: ${error.message}`, 'error');
+            } finally {
+                setServerButtonLoading(serverName, 'connectServer', false);
             }
         }
 
         async function disconnectServer(serverName) {
+            setServerButtonLoading(serverName, 'disconnectServer', true);
+            showToast(`Disconnecting from ${serverName}...`, 'info');
+
             try {
                 const response = await fetch(`/api/servers/${serverName}/disconnect`, {
-                    method: 'POST'
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
                 });
-                
-                if (response.ok) {
-                    // Refresh server list
-                    htmx.trigger('#servers-grid', 'refresh');
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showToast(data.message, 'success');
+                    // Refresh server list to update status
+                    await refreshServers();
                 } else {
-                    alert('Failed to disconnect from server');
+                    showToast(data.message || 'Failed to disconnect from server', 'error');
                 }
             } catch (error) {
-                alert('Error disconnecting from server: ' + error.message);
+                console.error('Error disconnecting from server:', error);
+                showToast(`Disconnection error: ${error.message}`, 'error');
+            } finally {
+                setServerButtonLoading(serverName, 'disconnectServer', false);
             }
         }
     </script>
 </body>
+
 </html>

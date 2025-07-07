@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -21,6 +22,7 @@
             padding: 12px;
             border-radius: 8px;
         }
+
         .log-container {
             background-color: #1a1a1a;
             color: #ffffff;
@@ -33,32 +35,102 @@
             border-radius: 8px;
             border: 1px solid #333;
         }
+
         .log-line {
             padding: 2px 0;
             border-bottom: 1px solid #333;
         }
+
         .log-line:last-child {
             border-bottom: none;
         }
+
         .command-input {
             font-family: 'Courier New', monospace;
         }
+
         .tab-content {
             display: none;
         }
+
         .tab-content.active {
             display: block;
         }
+
         .tab-button {
             transition: all 0.3s ease;
         }
+
         .tab-button.active {
             background-color: #3b82f6;
             color: white;
         }
+
+        /* Toast notification styles */
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 16px 24px;
+            border-radius: 8px;
+            color: white;
+            font-weight: 500;
+            z-index: 1000;
+            transform: translateX(100%);
+            transition: transform 0.3s ease;
+            max-width: 400px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+
+        .toast.show {
+            transform: translateX(0);
+        }
+
+        .toast.success {
+            background-color: #10b981;
+        }
+
+        .toast.error {
+            background-color: #ef4444;
+        }
+
+        .toast.info {
+            background-color: #3b82f6;
+        }
+
+        /* Loading spinner */
+        .spinner {
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #3498db;
+            border-radius: 50%;
+            width: 16px;
+            height: 16px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            margin-right: 8px;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        .btn-loading {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
     </style>
 </head>
+
 <body class="bg-gray-100 min-h-screen">
+    <!-- Toast container -->
+    <div id="toast-container"></div>
+
     <div class="container mx-auto px-4 py-8">
         <header class="mb-8">
             <div class="flex items-center justify-between">
@@ -67,10 +139,9 @@
                     <p class="text-gray-600">{{ server_config.host }}:{{ server_config.port }}</p>
                 </div>
                 <div class="flex space-x-4">
-                    <button 
-                        onclick="refreshSystemInfo()"
+                    <button id="refresh-btn" onclick="refreshSystemInfo()"
                         class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors">
-                        Refresh Info
+                        <span class="btn-text">Refresh Info</span>
                     </button>
                     <a href="/" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg transition-colors">
                         Back to Dashboard
@@ -82,22 +153,18 @@
         <!-- Tab Navigation -->
         <div class="mb-6">
             <nav class="flex space-x-1 bg-gray-200 p-1 rounded-lg">
-                <button 
-                    onclick="switchTab('overview')"
+                <button onclick="switchTab('overview')"
                     class="tab-button flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors active"
                     id="overview-tab">
                     Overview
                 </button>
-                <button 
-                    onclick="switchTab('terminal')"
+                <button onclick="switchTab('terminal')"
                     class="tab-button flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors"
                     id="terminal-tab">
                     Terminal
                 </button>
-                <button 
-                    onclick="switchTab('logs')"
-                    class="tab-button flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors"
-                    id="logs-tab">
+                <button onclick="switchTab('logs')"
+                    class="tab-button flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors" id="logs-tab">
                     Logs
                 </button>
             </nav>
@@ -106,37 +173,33 @@
         <!-- Overview Tab -->
         <div id="overview-content" class="tab-content active">
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- System Information -->
                 <div class="bg-white rounded-lg shadow-md p-6">
                     <h2 class="text-xl font-semibold text-gray-800 mb-4">System Information</h2>
                     <div id="system-info" class="space-y-2">
-                        <div class="flex justify-center">
-                            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-                        </div>
+                        <!-- System info will be loaded here -->
                     </div>
                 </div>
-                
+
+                <!-- Quick Actions -->
                 <div class="bg-white rounded-lg shadow-md p-6">
                     <h2 class="text-xl font-semibold text-gray-800 mb-4">Quick Actions</h2>
-                    <div class="space-y-2">
-                        <button 
-                            onclick="executeQuickCommand('df -h')"
-                            class="w-full text-left px-4 py-2 bg-gray-50 hover:bg-gray-100 rounded-md transition-colors">
-                            Check Disk Usage
+                    <div class="grid grid-cols-2 gap-3">
+                        <button onclick="executeQuickCommand('uptime')"
+                            class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded text-sm">
+                            Show Uptime
                         </button>
-                        <button 
-                            onclick="executeQuickCommand('free -h')"
-                            class="w-full text-left px-4 py-2 bg-gray-50 hover:bg-gray-100 rounded-md transition-colors">
-                            Check Memory Usage
+                        <button onclick="executeQuickCommand('df -h')"
+                            class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded text-sm">
+                            Disk Usage
                         </button>
-                        <button 
-                            onclick="executeQuickCommand('ps aux | head -10')"
-                            class="w-full text-left px-4 py-2 bg-gray-50 hover:bg-gray-100 rounded-md transition-colors">
+                        <button onclick="executeQuickCommand('free -h')"
+                            class="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded text-sm">
+                            Memory Usage
+                        </button>
+                        <button onclick="executeQuickCommand('top -bn1 | head -20')"
+                            class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded text-sm">
                             Top Processes
-                        </button>
-                        <button 
-                            onclick="executeQuickCommand('netstat -tlnp')"
-                            class="w-full text-left px-4 py-2 bg-gray-50 hover:bg-gray-100 rounded-md transition-colors">
-                            Network Connections
                         </button>
                     </div>
                 </div>
@@ -149,16 +212,12 @@
                 <h2 class="text-xl font-semibold text-gray-800 mb-4">Terminal</h2>
                 <div class="space-y-4">
                     <div class="flex space-x-2">
-                        <input 
-                            type="text" 
-                            id="command-input"
+                        <input type="text" id="command-input"
                             class="command-input flex-1 px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            placeholder="Enter command..."
-                            onkeypress="handleCommandInput(event)">
-                        <button 
-                            onclick="executeCommand()"
+                            placeholder="Enter command..." onkeypress="handleCommandInput(event)">
+                        <button id="execute-btn" onclick="executeCommand()"
                             class="bg-green-500 hover:bg-green-600 text-white px-6 py-2 rounded-md transition-colors">
-                            Execute
+                            <span class="btn-text">Execute</span>
                         </button>
                     </div>
                     <div id="terminal-output" class="terminal min-h-[400px]">
@@ -181,15 +240,13 @@
                             <option value="{{ log_file }}">{{ log_file }}</option>
                             {% endfor %}
                         </select>
-                        <button 
-                            onclick="startLogTail()"
+                        <button id="start-tail-btn" onclick="startLogTail()"
                             class="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-md transition-colors">
-                            Start Tail
+                            <span class="btn-text">Start Tail</span>
                         </button>
-                        <button 
-                            onclick="stopLogTail()"
-                            class="bg-red-500 hover:bg-red-600 text-white px-6 py-2 rounded-md transition-colors">
-                            Stop Tail
+                        <button id="stop-tail-btn" onclick="stopLogTail()" disabled
+                            class="bg-red-500 hover:bg-red-600 text-white px-6 py-2 rounded-md transition-colors opacity-50 cursor-not-allowed">
+                            <span class="btn-text">Stop Tail</span>
                         </button>
                     </div>
                     <div id="log-output" class="log-container min-h-[400px]">
@@ -204,41 +261,89 @@
         let websocket = null;
         let currentLogFile = null;
 
-        // Initialize WebSocket connection
-        function initWebSocket() {
-            const wsUrl = `ws://${window.location.host}/ws/{{ server_name }}`;
-            websocket = new WebSocket(wsUrl);
-            
-            websocket.onopen = function(event) {
-                console.log('WebSocket connected');
-            };
-            
-            websocket.onmessage = function(event) {
-                const data = JSON.parse(event.data);
-                handleWebSocketMessage(data);
-            };
-            
-            websocket.onclose = function(event) {
-                console.log('WebSocket disconnected');
-                setTimeout(initWebSocket, 3000); // Reconnect after 3 seconds
-            };
-            
-            websocket.onerror = function(error) {
-                console.error('WebSocket error:', error);
-            };
+        // Toast notification system
+        function showToast(message, type = 'info') {
+            const toastContainer = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.innerHTML = `
+                <div class="flex items-center justify-between">
+                    <span>${message}</span>
+                    <button onclick="closeToast(this)" class="ml-4 text-white hover:text-gray-200">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+            `;
+
+            toastContainer.appendChild(toast);
+
+            // Show toast
+            setTimeout(() => toast.classList.add('show'), 100);
+
+            // Auto-remove after 5 seconds
+            setTimeout(() => {
+                if (toast.parentNode) {
+                    closeToast(toast);
+                }
+            }, 5000);
         }
 
-        function handleWebSocketMessage(data) {
-            switch (data.type) {
-                case 'log_line':
-                    addLogLine(data.line);
-                    break;
-                case 'command_output':
-                    addTerminalOutput(`$ ${data.command}\n${data.output}`);
-                    break;
-                case 'error':
-                    addTerminalOutput(`Error: ${data.message}`);
-                    break;
+        function closeToast(element) {
+            const toast = element.classList.contains('toast') ? element : element.closest('.toast');
+            if (toast) {
+                toast.classList.remove('show');
+                setTimeout(() => {
+                    if (toast.parentNode) {
+                        toast.parentNode.removeChild(toast);
+                    }
+                }, 300);
+            }
+        }
+
+        // Loading state management
+        function setButtonLoading(buttonId, loading = true, loadingText = 'Loading...') {
+            const button = document.getElementById(buttonId);
+            if (!button) return;
+
+            const textElement = button.querySelector('.btn-text');
+            if (!textElement) return;
+
+            if (loading) {
+                button.classList.add('btn-loading');
+                button.disabled = true;
+                button.dataset.originalText = textElement.textContent;
+                textElement.innerHTML = `<span class="spinner"></span>${loadingText}`;
+            } else {
+                button.classList.remove('btn-loading');
+                button.disabled = false;
+                textElement.textContent = button.dataset.originalText || textElement.textContent;
+            }
+        }
+
+        // Log tail state management
+        function updateLogTailState(isRunning = false) {
+            const startBtn = document.getElementById('start-tail-btn');
+            const stopBtn = document.getElementById('stop-tail-btn');
+            const logSelect = document.getElementById('log-file-select');
+
+            if (isRunning) {
+                // When log tail is running
+                startBtn.disabled = true;
+                startBtn.classList.add('opacity-50', 'cursor-not-allowed');
+                logSelect.disabled = true;
+                logSelect.classList.add('opacity-50', 'cursor-not-allowed');
+                stopBtn.disabled = false;
+                stopBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+            } else {
+                // When log tail is not running
+                startBtn.disabled = false;
+                startBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                logSelect.disabled = false;
+                logSelect.classList.remove('opacity-50', 'cursor-not-allowed');
+                stopBtn.disabled = true;
+                stopBtn.classList.add('opacity-50', 'cursor-not-allowed');
             }
         }
 
@@ -247,47 +352,138 @@
             document.querySelectorAll('.tab-content').forEach(content => {
                 content.classList.remove('active');
             });
-            
+
             // Remove active class from all tab buttons
             document.querySelectorAll('.tab-button').forEach(button => {
                 button.classList.remove('active');
             });
-            
+
             // Show selected tab content
             document.getElementById(tabName + '-content').classList.add('active');
+
+            // Add active class to selected tab button
             document.getElementById(tabName + '-tab').classList.add('active');
         }
 
+        function initWebSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/ws/{{ server_name }}`;
+
+            showToast('Connecting to server...', 'info');
+
+            websocket = new WebSocket(wsUrl);
+
+            websocket.onopen = function (event) {
+                console.log('WebSocket connected');
+                showToast('Connected to {{ server_name }}', 'success');
+            };
+
+            websocket.onmessage = function (event) {
+                const data = JSON.parse(event.data);
+
+                switch (data.type) {
+                    case 'command_output':
+                        addTerminalOutput(`$ ${data.command}`);
+                        addTerminalOutput(data.output);
+                        setButtonLoading('execute-btn', false);
+                        showToast('Command executed', 'success');
+                        break;
+                    case 'log_line':
+                        addLogLine(data.line);
+                        break;
+                    case 'error':
+                        console.error('WebSocket error:', data.message);
+                        showToast(`Error: ${data.message}`, 'error');
+                        setButtonLoading('execute-btn', false);
+                        setButtonLoading('start-tail-btn', false);
+                        setButtonLoading('stop-tail-btn', false);
+                        updateLogTailState(false); // Reset to not running state on error
+                        break;
+                    case 'log_started':
+                        showToast(`Started monitoring ${data.file_path}`, 'success');
+                        setButtonLoading('start-tail-btn', false);
+                        updateLogTailState(true); // Set to running state
+                        break;
+                    case 'log_stopped':
+                        showToast(`Stopped monitoring ${data.file_path}`, 'info');
+                        setButtonLoading('stop-tail-btn', false);
+                        updateLogTailState(false); // Set to not running state
+                        break;
+                }
+            };
+
+            websocket.onerror = function (error) {
+                console.error('WebSocket error:', error);
+                showToast('WebSocket connection error', 'error');
+            };
+
+            websocket.onclose = function (event) {
+                console.log('WebSocket disconnected');
+                showToast('Disconnected from server', 'error');
+
+                // Reset log tail state when disconnected
+                updateLogTailState(false);
+                currentLogFile = null;
+
+                // Try to reconnect after 3 seconds
+                setTimeout(() => {
+                    if (!websocket || websocket.readyState === WebSocket.CLOSED) {
+                        showToast('Attempting to reconnect...', 'info');
+                        initWebSocket();
+                    }
+                }, 3000);
+            };
+        }
+
         async function refreshSystemInfo() {
+            setButtonLoading('refresh-btn', true, 'Refreshing...');
+            showToast('Refreshing system information...', 'info');
+
             try {
                 const response = await fetch(`/api/servers/{{ server_name }}/info`);
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
                 const data = await response.json();
-                
-                const infoDiv = document.getElementById('system-info');
-                infoDiv.innerHTML = '';
-                
-                Object.entries(data.info).forEach(([key, value]) => {
-                    const div = document.createElement('div');
-                    div.className = 'flex justify-between py-2 border-b border-gray-200 last:border-b-0';
-                    div.innerHTML = `
-                        <span class="font-medium text-gray-700">${key.replace('_', ' ').toUpperCase()}:</span>
-                        <span class="text-gray-600 text-right">${value}</span>
-                    `;
-                    infoDiv.appendChild(div);
-                });
-                
+
+                // Update system info display
+                const systemInfo = document.getElementById('system-info');
+                if (systemInfo && data.info) {
+                    systemInfo.innerHTML = '';
+                    Object.entries(data.info).forEach(([key, value]) => {
+                        const div = document.createElement('div');
+                        div.className = 'flex justify-between py-2 border-b border-gray-200 last:border-b-0';
+                        div.innerHTML = `
+                            <span class="font-medium text-gray-700">${key.replace('_', ' ').toUpperCase()}:</span>
+                            <span class="text-gray-600 text-right">${value}</span>
+                        `;
+                        systemInfo.appendChild(div);
+                    });
+                }
+
+                showToast('System information updated', 'success');
             } catch (error) {
                 console.error('Error refreshing system info:', error);
+                showToast(`Failed to refresh system info: ${error.message}`, 'error');
+            } finally {
+                setButtonLoading('refresh-btn', false);
             }
         }
 
         function executeQuickCommand(command) {
-            if (websocket && websocket.readyState === WebSocket.OPEN) {
-                websocket.send(JSON.stringify({
-                    type: 'execute_command',
-                    command: command
-                }));
+            if (!websocket || websocket.readyState !== WebSocket.OPEN) {
+                showToast('Not connected to server', 'error');
+                return;
             }
+
+            showToast(`Executing: ${command}`, 'info');
+
+            websocket.send(JSON.stringify({
+                type: 'execute_command',
+                command: command
+            }));
         }
 
         function handleCommandInput(event) {
@@ -299,15 +495,26 @@
         function executeCommand() {
             const input = document.getElementById('command-input');
             const command = input.value.trim();
-            
-            if (command && websocket && websocket.readyState === WebSocket.OPEN) {
-                websocket.send(JSON.stringify({
-                    type: 'execute_command',
-                    command: command
-                }));
-                
-                input.value = '';
+
+            if (!command) {
+                showToast('Please enter a command', 'error');
+                return;
             }
+
+            if (!websocket || websocket.readyState !== WebSocket.OPEN) {
+                showToast('Not connected to server', 'error');
+                return;
+            }
+
+            setButtonLoading('execute-btn', true, 'Executing...');
+            showToast(`Executing: ${command}`, 'info');
+
+            websocket.send(JSON.stringify({
+                type: 'execute_command',
+                command: command
+            }));
+
+            input.value = '';
         }
 
         function addTerminalOutput(output) {
@@ -319,43 +526,63 @@
         function startLogTail() {
             const select = document.getElementById('log-file-select');
             const logFile = select.value;
-            
+
             if (!logFile) {
-                alert('Please select a log file');
+                showToast('Please select a log file', 'error');
                 return;
             }
-            
-            if (websocket && websocket.readyState === WebSocket.OPEN) {
-                // Stop current tail if any
-                if (currentLogFile) {
-                    websocket.send(JSON.stringify({
-                        type: 'stop_log_tail',
-                        file_path: currentLogFile
-                    }));
-                }
-                
-                // Clear log output
-                document.getElementById('log-output').innerHTML = '';
-                
-                // Start new tail
-                websocket.send(JSON.stringify({
-                    type: 'start_log_tail',
-                    file_path: logFile
-                }));
-                
-                currentLogFile = logFile;
-            }
-        }
 
-        function stopLogTail() {
-            if (currentLogFile && websocket && websocket.readyState === WebSocket.OPEN) {
+            if (!websocket || websocket.readyState !== WebSocket.OPEN) {
+                showToast('Not connected to server', 'error');
+                return;
+            }
+
+            setButtonLoading('start-tail-btn', true, 'Starting...');
+            showToast(`Starting to monitor ${logFile}...`, 'info');
+
+            // Stop current tail if any
+            if (currentLogFile) {
                 websocket.send(JSON.stringify({
                     type: 'stop_log_tail',
                     file_path: currentLogFile
                 }));
-                
-                currentLogFile = null;
             }
+
+            // Clear log output
+            document.getElementById('log-output').innerHTML = '';
+
+            // Start new tail
+            websocket.send(JSON.stringify({
+                type: 'start_log_tail',
+                file_path: logFile
+            }));
+
+            currentLogFile = logFile;
+        }
+
+        function stopLogTail() {
+            if (!currentLogFile) {
+                showToast('No log file is currently being monitored', 'error');
+                return;
+            }
+
+            if (!websocket || websocket.readyState !== WebSocket.OPEN) {
+                showToast('Not connected to server', 'error');
+                return;
+            }
+
+            setButtonLoading('stop-tail-btn', true, 'Stopping...');
+            showToast(`Stopping monitoring of ${currentLogFile}...`, 'info');
+
+            websocket.send(JSON.stringify({
+                type: 'stop_log_tail',
+                file_path: currentLogFile
+            }));
+
+            // Clear the log output and reset the message
+            document.getElementById('log-output').innerHTML = 'Log monitoring stopped. Select a log file and click "Start Tail" to begin monitoring';
+
+            currentLogFile = null;
         }
 
         function addLogLine(line) {
@@ -365,13 +592,31 @@
             logLine.textContent = line;
             logOutput.appendChild(logLine);
             logOutput.scrollTop = logOutput.scrollHeight;
+
+            // Limit log lines to prevent memory issues
+            const lines = logOutput.children;
+            if (lines.length > 1000) {
+                logOutput.removeChild(lines[0]);
+            }
         }
 
         // Initialize on page load
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', function () {
+            showToast('Initializing {{ server_name }} dashboard...', 'info');
             initWebSocket();
             refreshSystemInfo();
+
+            // Initialize log tail state - no tail running initially
+            updateLogTailState(false);
+        });
+
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', function () {
+            if (websocket && websocket.readyState === WebSocket.OPEN) {
+                websocket.close();
+            }
         });
     </script>
 </body>
+
 </html>

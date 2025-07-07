@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from typing import Any, cast
 
 import asyncssh
@@ -124,7 +124,7 @@ class SSHConnectionManager:
         self,
         server_name: str,
         command: str,
-        callback: Callable[[str], None] | None = None,
+        callback: Callable[[str], Awaitable[None]] | None = None,
     ) -> SSHClientProcess[str]:
         """Execute a command with streaming output."""
         conn = await self.connect(server_name)
@@ -147,13 +147,13 @@ class SSHConnectionManager:
             raise
 
     async def _stream_output(
-        self, process: SSHClientProcess[str], callback: Callable[[str], None]
+        self, process: SSHClientProcess[str], callback: Callable[[str], Awaitable[None]]
     ) -> None:
         """Stream output from a process to a callback function."""
         try:
             async for line in process.stdout:
                 # Since we specified encoding='utf-8', line should be a str
-                callback(line)
+                await callback(line)
         except (
             ConnectionError,
             OSError,
@@ -198,7 +198,7 @@ class SSHConnectionManager:
         self,
         server_name: str,
         file_path: str,
-        callback: Callable[[str], None],
+        callback: Callable[[str], Awaitable[None]],
         lines: int = 10,
     ) -> SSHClientProcess[str]:
         """Tail a file and stream new lines to callback."""
@@ -209,7 +209,7 @@ class SSHConnectionManager:
             )
             for line in initial_content.strip().split("\n"):
                 if line.strip():
-                    callback(line)
+                    await callback(line)
         except (ConnectionError, OSError, RuntimeError, FileNotFoundError) as e:
             logger.warning("Could not get initial tail content: %s", e)
 

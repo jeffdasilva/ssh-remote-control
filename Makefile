@@ -137,8 +137,15 @@ test-watch: ## Run tests in watch mode
 
 # Application running
 .PHONY: run
-run: ## Start the web server (default: localhost:8000)
-	@echo "$(YELLOW)Starting SSH Remote Control web server...$(NC)"
+run: ## Start the web server with auto-reload (default: localhost:8000)
+	@echo "$(YELLOW)Starting SSH Remote Control web server with auto-reload...$(NC)"
+	@echo "$(GREEN)🚀 Server will be available at http://localhost:8000$(NC)"
+	@echo "$(GREEN)🔄 Auto-reload enabled for development$(NC)"
+	$(UV) run ssh-remote-control web --reload
+
+.PHONY: run-prod
+run-prod: ## Start web server in production mode (no auto-reload)
+	@echo "$(YELLOW)Starting SSH Remote Control web server in production mode...$(NC)"
 	@echo "$(GREEN)🚀 Server will be available at http://localhost:8000$(NC)"
 	$(UV) run ssh-remote-control web
 

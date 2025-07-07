@@ -44,6 +44,9 @@ class ConnectionManager:
     def __init__(self) -> None:
         self.active_connections: list[WebSocket] = []
         self.log_tasks: dict[str, asyncio.Task[Any]] = {}
+        self.log_processes: dict[
+            str, Any
+        ] = {}  # Store SSH processes for proper cleanup
 
     async def connect(self, websocket: WebSocket) -> None:
         """Accept a WebSocket connection."""
@@ -61,6 +64,8 @@ class ConnectionManager:
             await websocket.send_text(message)
         except (ConnectionResetError, ConnectionAbortedError, RuntimeError) as e:
             logger.error("Error sending message: %s", e)
+            # Remove the websocket from active connections if send fails
+            self.disconnect(websocket)
 
     async def broadcast(self, message: str) -> None:
         """Broadcast a message to all connected WebSockets."""
@@ -84,26 +89,46 @@ class ConnectionManager:
         # Stop existing task if any
         if task_key in self.log_tasks:
             self.log_tasks[task_key].cancel()
+            del self.log_tasks[task_key]
+
+        # Stop existing process if any
+        if task_key in self.log_processes:
+            try:
+                process = self.log_processes[task_key]
+                if hasattr(process, "terminate"):
+                    process.terminate()
+                elif hasattr(process, "cancel"):
+                    process.cancel()
+            except (AttributeError, OSError, RuntimeError) as e:
+                logger.debug("Error stopping old log tail process: %s", e)
+            finally:
+                del self.log_processes[task_key]
 
         async def log_callback(line: str) -> None:
             """Callback for log lines."""
-            await self.send_personal_message(
-                json.dumps(
-                    {
-                        "type": "log_line",
-                        "server": server,
-                        "file": file_path,
-                        "line": line.strip(),
-                    }
-                ),
-                websocket,
-            )
+            try:
+                await self.send_personal_message(
+                    json.dumps(
+                        {
+                            "type": "log_line",
+                            "server": server,
+                            "file": file_path,
+                            "line": line.strip(),
+                        }
+                    ),
+                    websocket,
+                )
+            except (ConnectionError, OSError, RuntimeError, TypeError) as e:
+                logger.error("Error sending log line: %s", e)
+                # Stop the tail if we can't send messages
+                self.stop_log_tail(server, file_path)
 
         try:
             ssh_manager = websocket.app.state.ssh_manager
             process = await ssh_manager.tail_file(server, file_path, log_callback)
 
-            # Store the task
+            # Store both the process and the task for proper cleanup
+            self.log_processes[task_key] = process
             self.log_tasks[task_key] = asyncio.create_task(process.wait())
 
         except (ConnectionError, OSError, ValueError, RuntimeError) as e:
@@ -117,9 +142,24 @@ class ConnectionManager:
     def stop_log_tail(self, server: str, file_path: str) -> None:
         """Stop tailing a log file."""
         task_key = f"{server}:{file_path}"
+
+        # Cancel the waiting task
         if task_key in self.log_tasks:
             self.log_tasks[task_key].cancel()
             del self.log_tasks[task_key]
+
+        # Terminate the SSH process
+        if task_key in self.log_processes:
+            try:
+                process = self.log_processes[task_key]
+                if hasattr(process, "terminate"):
+                    process.terminate()
+                elif hasattr(process, "cancel"):
+                    process.cancel()
+            except (AttributeError, OSError, RuntimeError) as e:
+                logger.error("Error terminating log tail process: %s", e)
+            finally:
+                del self.log_processes[task_key]
 
 
 def create_app() -> FastAPI:
@@ -203,25 +243,60 @@ def create_app() -> FastAPI:
     async def connect_server(server_name: str, request: Request) -> JSONResponse:
         """Connect to a server."""
         if server_name not in settings.list_servers():
-            raise HTTPException(status_code=404, detail="Server not found")
+            return JSONResponse(
+                {
+                    "success": False,
+                    "message": f"Server '{server_name}' not found in configuration",
+                },
+                status_code=404,
+            )
 
         try:
             await request.app.state.ssh_manager.connect(server_name)
-            return JSONResponse({"status": "connected"})
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e)) from e
+            logger.info("Successfully connected to server: %s", server_name)
+            return JSONResponse(
+                {
+                    "success": True,
+                    "message": f"Successfully connected to {server_name}",
+                    "status": "connected",
+                }
+            )
+        except (ConnectionError, OSError, RuntimeError, ValueError, TimeoutError) as e:
+            error_msg = f"Failed to connect to {server_name}: {str(e)}"
+            logger.error(error_msg)
+            return JSONResponse(
+                {"success": False, "message": error_msg, "status": "disconnected"},
+                status_code=500,
+            )
 
     @app.post("/api/servers/{server_name}/disconnect", response_class=JSONResponse)
     async def disconnect_server(server_name: str, request: Request) -> JSONResponse:
         """Disconnect from a server."""
         if server_name not in settings.list_servers():
-            raise HTTPException(status_code=404, detail="Server not found")
+            return JSONResponse(
+                {
+                    "success": False,
+                    "message": f"Server '{server_name}' not found in configuration",
+                },
+                status_code=404,
+            )
 
         try:
             await request.app.state.ssh_manager.disconnect(server_name)
-            return JSONResponse({"status": "disconnected"})
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e)) from e
+            logger.info("Successfully disconnected from server: %s", server_name)
+            return JSONResponse(
+                {
+                    "success": True,
+                    "message": f"Successfully disconnected from {server_name}",
+                    "status": "disconnected",
+                }
+            )
+        except (ConnectionError, OSError, RuntimeError, ValueError) as e:
+            error_msg = f"Failed to disconnect from {server_name}: {str(e)}"
+            logger.error(error_msg)
+            return JSONResponse(
+                {"success": False, "message": error_msg}, status_code=500
+            )
 
     @app.post("/api/execute", response_class=JSONResponse)
     async def execute_command(
@@ -275,11 +350,55 @@ def create_app() -> FastAPI:
                 message = json.loads(data)
 
                 if message["type"] == "start_log_tail":
-                    await connection_manager.start_log_tail(
-                        server_name, message["file_path"], websocket
-                    )
+                    try:
+                        await connection_manager.start_log_tail(
+                            server_name, message["file_path"], websocket
+                        )
+                        # Send confirmation message
+                        await connection_manager.send_personal_message(
+                            json.dumps(
+                                {
+                                    "type": "log_started",
+                                    "file_path": message["file_path"],
+                                }
+                            ),
+                            websocket,
+                        )
+                    except (ConnectionError, OSError, RuntimeError, ValueError) as e:
+                        await connection_manager.send_personal_message(
+                            json.dumps(
+                                {
+                                    "type": "error",
+                                    "message": f"Failed to start log tail: {str(e)}",
+                                }
+                            ),
+                            websocket,
+                        )
                 elif message["type"] == "stop_log_tail":
-                    connection_manager.stop_log_tail(server_name, message["file_path"])
+                    try:
+                        connection_manager.stop_log_tail(
+                            server_name, message["file_path"]
+                        )
+                        # Send confirmation message
+                        await connection_manager.send_personal_message(
+                            json.dumps(
+                                {
+                                    "type": "log_stopped",
+                                    "file_path": message["file_path"],
+                                }
+                            ),
+                            websocket,
+                        )
+                    except (ConnectionError, OSError, RuntimeError, ValueError) as e:
+                        await connection_manager.send_personal_message(
+                            json.dumps(
+                                {
+                                    "type": "error",
+                                    "message": f"Failed to stop log tail: {str(e)}",
+                                }
+                            ),
+                            websocket,
+                        )
                 elif message["type"] == "execute_command":
                     try:
                         output = await websocket.app.state.ssh_manager.execute_command(
