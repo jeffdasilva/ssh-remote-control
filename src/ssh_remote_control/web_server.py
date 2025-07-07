@@ -211,7 +211,7 @@ def create_app() -> FastAPI:
         """Main dashboard page."""
         servers = settings.list_servers()
         return templates.TemplateResponse(
-            request, "dashboard.html", {"servers": servers}
+            request, "dashboard_enhanced.html", {"servers": servers}
         )
 
     @app.get("/api/servers", response_class=JSONResponse)
@@ -338,7 +338,7 @@ def create_app() -> FastAPI:
         config = settings.get_server_config(server_name)
         return templates.TemplateResponse(
             request,
-            "server_detail.html",
+            "server_detail_enhanced.html",
             {
                 "server_name": server_name,
                 "server_config": config,
