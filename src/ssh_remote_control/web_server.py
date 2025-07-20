@@ -6,7 +6,7 @@ import asyncio
 import json
 import logging
 from collections.abc import AsyncGenerator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
@@ -85,7 +85,7 @@ class ConnectionManager:
         self, server: str, file_path: str, websocket: WebSocket
     ) -> None:
         """Start tailing a log file and send updates via WebSocket."""
-        task_key = f"{server}:{file_path}"
+        task_key = f"{server}:log:{file_path}"
 
         # Stop existing task if any
         if task_key in self.log_tasks:
@@ -142,7 +142,7 @@ class ConnectionManager:
 
     def stop_log_tail(self, server: str, file_path: str) -> None:
         """Stop tailing a log file."""
-        task_key = f"{server}:{file_path}"
+        task_key = f"{server}:log:{file_path}"
 
         # Cancel the waiting task
         if task_key in self.log_tasks:
@@ -161,6 +161,153 @@ class ConnectionManager:
                 logger.error("Error terminating log tail process: %s", e)
             finally:
                 del self.log_processes[task_key]
+
+    async def start_service_monitor(
+        self, server: str, service_name: str, websocket: WebSocket
+    ) -> None:
+        """Start monitoring service logs using journalctl.
+
+        Send updates via WebSocket.
+        """
+        task_key = f"{server}:service:{service_name}"
+
+        # Stop existing task if any
+        if task_key in self.log_tasks:
+            self.log_tasks[task_key].cancel()
+            del self.log_tasks[task_key]
+
+        # Stop existing process if any
+        if task_key in self.log_processes:
+            try:
+                process = self.log_processes[task_key]
+                if hasattr(process, "terminate"):
+                    process.terminate()
+                elif hasattr(process, "cancel"):
+                    process.cancel()
+            except (AttributeError, OSError, RuntimeError) as e:
+                logger.debug("Error stopping old service monitor process: %s", e)
+            finally:
+                del self.log_processes[task_key]
+
+        async def service_log_callback(log_json: str) -> None:
+            """Callback for service log updates."""
+            try:
+                log_data = json.loads(log_json)
+                await self.send_personal_message(
+                    json.dumps(
+                        {
+                            "type": "service_log",
+                            "server": server,
+                            "service": service_name,
+                            "log": log_data,
+                        }
+                    ),
+                    websocket,
+                )
+            except (
+                ConnectionError,
+                OSError,
+                RuntimeError,
+                TypeError,
+                json.JSONDecodeError,
+            ) as e:
+                logger.error("Error sending service log: %s", e)
+                # Stop the monitor if we can't send messages
+                self.stop_service_monitor(server, service_name)
+
+        try:
+            ssh_manager = websocket.app.state.ssh_manager
+            process = await ssh_manager.monitor_service_logs(
+                server, service_name, service_log_callback
+            )
+
+            # Store both the process and the task for proper cleanup
+            self.log_processes[task_key] = process
+            self.log_tasks[task_key] = asyncio.create_task(process.wait())
+
+        except (ConnectionError, OSError, ValueError, RuntimeError) as e:
+            await self.send_personal_message(
+                json.dumps(
+                    {
+                        "type": "error",
+                        "message": f"Failed to start service monitor: {e}",
+                    }
+                ),
+                websocket,
+            )
+
+    def stop_service_monitor(self, server: str, service_name: str) -> None:
+        """Stop monitoring a service."""
+        task_key = f"{server}:service:{service_name}"
+
+        # Cancel the waiting task
+        if task_key in self.log_tasks:
+            self.log_tasks[task_key].cancel()
+            del self.log_tasks[task_key]
+
+        # Terminate the process
+        if task_key in self.log_processes:
+            try:
+                process = self.log_processes[task_key]
+                if hasattr(process, "terminate"):
+                    process.terminate()
+                elif hasattr(process, "cancel"):
+                    process.cancel()
+            except (AttributeError, OSError, RuntimeError) as e:
+                logger.error("Error terminating service monitor process: %s", e)
+            finally:
+                del self.log_processes[task_key]
+
+    def disconnect_all_monitoring(self, _websocket: WebSocket) -> None:
+        """Disconnect all monitoring tasks for a websocket."""
+        try:
+            tasks_to_remove = []
+            processes_to_remove = []
+
+            # Ensure attributes exist (defensive programming)
+            if not hasattr(self, "log_tasks"):
+                self.log_tasks = {}
+            if not hasattr(self, "log_processes"):
+                self.log_processes = {}
+
+            # Find all tasks/processes associated with this websocket
+            # Since we don't store websocket mapping, we'll clean up all for safety
+            for task_key in list(self.log_tasks.keys()):
+                tasks_to_remove.append(task_key)
+
+            for process_key in list(self.log_processes.keys()):
+                processes_to_remove.append(process_key)
+
+            # Clean up tasks
+            for task_key in tasks_to_remove:
+                if task_key in self.log_tasks:
+                    try:
+                        self.log_tasks[task_key].cancel()
+                        del self.log_tasks[task_key]
+                    except (AttributeError, KeyError, RuntimeError) as e:
+                        logger.warning("Error canceling task %s: %s", task_key, e)
+
+            # Clean up processes
+            for process_key in processes_to_remove:
+                if process_key in self.log_processes:
+                    try:
+                        process = self.log_processes[process_key]
+                        if hasattr(process, "terminate"):
+                            process.terminate()
+                        elif hasattr(process, "cancel"):
+                            process.cancel()
+                    except (AttributeError, OSError, RuntimeError) as e:
+                        logger.warning(
+                            "Error terminating monitoring process %s: %s",
+                            process_key,
+                            e,
+                        )
+                    finally:
+                        with suppress(KeyError):
+                            del self.log_processes[process_key]
+
+        except (AttributeError, KeyError, RuntimeError) as e:
+            logger.error("Error during disconnect_all_monitoring: %s", e, exc_info=True)
 
 
 def create_app() -> FastAPI:
@@ -329,6 +476,20 @@ def create_app() -> FastAPI:
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e)) from e
 
+    @app.get("/api/servers/{server_name}/services", response_class=JSONResponse)
+    async def get_services(server_name: str, request: Request) -> JSONResponse:
+        """Get list of running services for a server."""
+        if server_name not in settings.list_servers():
+            raise HTTPException(status_code=404, detail="Server not found")
+
+        try:
+            services = await request.app.state.ssh_manager.get_running_services(
+                server_name
+            )
+            return JSONResponse({"services": services})
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e)) from e
+
     @app.get("/server/{server_name}", response_class=HTMLResponse)
     async def server_detail(request: Request, server_name: str) -> HTMLResponse:
         """Server detail page."""
@@ -402,6 +563,60 @@ def create_app() -> FastAPI:
                                 {
                                     "type": "error",
                                     "message": f"Failed to stop log tail: {str(e)}",
+                                }
+                            ),
+                            websocket,
+                        )
+                elif message["type"] == "start_service_log_monitor":
+                    try:
+                        await connection_manager.start_service_monitor(
+                            server_name, message["service_name"], websocket
+                        )
+                        # Send confirmation message
+                        await connection_manager.send_personal_message(
+                            json.dumps(
+                                {
+                                    "type": "service_log_monitor_started",
+                                    "service_name": message["service_name"],
+                                }
+                            ),
+                            websocket,
+                        )
+                    except (ConnectionError, OSError, RuntimeError, ValueError) as e:
+                        await connection_manager.send_personal_message(
+                            json.dumps(
+                                {
+                                    "type": "error",
+                                    "message": (
+                                        f"Failed to start service log monitor: {str(e)}"
+                                    ),
+                                }
+                            ),
+                            websocket,
+                        )
+                elif message["type"] == "stop_service_log_monitor":
+                    try:
+                        connection_manager.stop_service_monitor(
+                            server_name, message["service_name"]
+                        )
+                        # Send confirmation message
+                        await connection_manager.send_personal_message(
+                            json.dumps(
+                                {
+                                    "type": "service_log_monitor_stopped",
+                                    "service_name": message["service_name"],
+                                }
+                            ),
+                            websocket,
+                        )
+                    except (ConnectionError, OSError, RuntimeError, ValueError) as e:
+                        await connection_manager.send_personal_message(
+                            json.dumps(
+                                {
+                                    "type": "error",
+                                    "message": (
+                                        f"Failed to stop service log monitor: {str(e)}"
+                                    ),
                                 }
                             ),
                             websocket,

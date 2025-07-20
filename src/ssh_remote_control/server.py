@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+import time
 from collections.abc import Awaitable, Callable
 from typing import Any, cast
 
@@ -241,6 +243,161 @@ class SSHConnectionManager:
                 info[key] = "N/A"
 
         return info
+
+    async def get_running_services(self, server_name: str) -> list[dict[str, Any]]:
+        """Get list of running systemd services from a remote server."""
+        try:
+            # Get all active services
+            command = (
+                "systemctl list-units --type=service --state=running "
+                "--no-legend --plain"
+            )
+            result = await self.execute_command(server_name, command)
+
+            services = []
+            for line in result.strip().split("\n"):
+                if line.strip():
+                    # Parse systemctl output: service_name.service loaded active running
+                    parts = line.strip().split()
+                    if len(parts) >= 4:
+                        service_name = parts[0].replace(".service", "")
+
+                        # Get detailed service info
+                        service_info = await self.get_service_status(
+                            server_name, service_name
+                        )
+                        services.append(service_info)
+
+            return services
+
+        except (ConnectionError, OSError, RuntimeError) as e:
+            logger.error("Failed to get running services from %s: %s", server_name, e)
+            return []
+
+    async def get_service_status(
+        self, server_name: str, service_name: str
+    ) -> dict[str, Any]:
+        """Get detailed status of a specific service."""
+        try:
+            # Get service status
+            status_cmd = (
+                f"systemctl show {service_name} "
+                "--property=ActiveState,SubState,LoadState,MainPID,Description"
+            )
+            status_result = await self.execute_command(server_name, status_cmd)
+
+            # Parse the output
+            service_info = {
+                "name": service_name,
+                "active": False,
+                "enabled": False,
+                "status": "unknown",
+                "pid": None,
+                "memory": None,
+                "description": service_name,
+            }
+
+            for line in status_result.strip().split("\n"):
+                if "=" in line:
+                    key, value = line.split("=", 1)
+                    if key == "ActiveState":
+                        service_info["active"] = value == "active"
+                        service_info["status"] = value
+                    elif key == "MainPID":
+                        try:
+                            service_info["pid"] = int(value) if value != "0" else None
+                        except ValueError:
+                            service_info["pid"] = None
+                    elif key == "Description":
+                        service_info["description"] = value
+
+            # Check if service is enabled
+            try:
+                enabled_cmd = f"systemctl is-enabled {service_name}"
+                enabled_result = await self.execute_command(server_name, enabled_cmd)
+                service_info["enabled"] = enabled_result.strip() == "enabled"
+            except (ConnectionError, OSError, RuntimeError):
+                service_info["enabled"] = False
+
+            # Get memory usage if PID is available
+            if service_info["pid"]:
+                try:
+                    memory_cmd = f"ps -p {service_info['pid']} -o rss= 2>/dev/null"
+                    memory_result = await self.execute_command(server_name, memory_cmd)
+                    if memory_result.strip():
+                        memory_kb = int(memory_result.strip())
+                        service_info["memory"] = f"{memory_kb / 1024:.1f}MB"
+                except (ConnectionError, OSError, ValueError, RuntimeError):
+                    service_info["memory"] = None
+
+            return service_info
+
+        except (ConnectionError, OSError, RuntimeError) as e:
+            logger.warning(
+                "Failed to get service status for %s on %s: %s",
+                service_name,
+                server_name,
+                e,
+            )
+            return {
+                "name": service_name,
+                "active": False,
+                "enabled": False,
+                "status": "unknown",
+                "pid": None,
+                "memory": None,
+                "description": service_name,
+            }
+
+    async def monitor_service_logs(
+        self,
+        server_name: str,
+        service_name: str,
+        callback: Callable[[str], Awaitable[None]],
+        lines: int = 10,
+    ) -> SSHClientProcess[str]:
+        """Monitor service logs in real-time using journalctl."""
+        # Start with recent logs
+        try:
+            initial_logs = await self.execute_command(
+                server_name, f"journalctl -u {service_name} -n {lines} --no-pager"
+            )
+            for line in initial_logs.strip().split("\n"):
+                if line.strip():
+                    await callback(
+                        json.dumps(
+                            {
+                                "type": "log_line",
+                                "service": service_name,
+                                "line": line.strip(),
+                                "timestamp": time.time(),
+                            }
+                        )
+                    )
+        except (ConnectionError, OSError, RuntimeError) as e:
+            logger.warning("Could not get initial service logs: %s", e)
+
+        # Follow the service logs in real-time
+        monitor_cmd = f"journalctl -fu {service_name} --no-pager"
+
+        async def log_callback(line: str) -> None:
+            """Process log lines."""
+            if line.strip():
+                await callback(
+                    json.dumps(
+                        {
+                            "type": "log_line",
+                            "service": service_name,
+                            "line": line.strip(),
+                            "timestamp": time.time(),
+                        }
+                    )
+                )
+
+        process = await self.execute_command_stream(
+            server_name, monitor_cmd, log_callback
+        )
+        return process
 
     async def is_connected(self, server_name: str) -> bool:
         """Check if connected to a server."""

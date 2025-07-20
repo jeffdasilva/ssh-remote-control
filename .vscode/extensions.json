@@ -4,7 +4,6 @@
         "ms-python.vscode-pylance",
         "ms-python.debugpy",
         "charliermarsh.ruff",
-        "ms-python.mypy-type-checker",
         "GitHub.copilot",
         "GitHub.copilot-chat",
         "redhat.vscode-yaml",

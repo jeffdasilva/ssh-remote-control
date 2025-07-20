@@ -270,6 +270,11 @@
                     </button>
                     <button
                         class="tab-button py-4 px-2 border-b-2 border-transparent hover:border-blue-300 dark:hover:border-blue-500 text-gray-600 dark:text-dark-muted hover:text-blue-600 dark:hover:text-blue-400 font-medium"
+                        onclick="switchTab('services')">
+                        Services
+                    </button>
+                    <button
+                        class="tab-button py-4 px-2 border-b-2 border-transparent hover:border-blue-300 dark:hover:border-blue-500 text-gray-600 dark:text-dark-muted hover:text-blue-600 dark:hover:text-blue-400 font-medium"
                         onclick="switchTab('logs')">
                         Log Monitor
                     </button>
@@ -302,6 +307,40 @@
                         <div id="terminal-output" class="terminal">
                             Welcome to SSH Remote Control Terminal for {{ server_name }}
                             Type commands and press Enter to execute them on the remote server.
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Services Tab -->
+                <div id="services-tab" class="tab-content">
+                    <h3 class="text-xl font-semibold mb-4 text-gray-800 dark:text-dark-text">Service Monitor</h3>
+                    <div class="space-y-4">
+                        <div class="flex items-center space-x-4">
+                            <select id="service-select"
+                                class="px-3 py-2 border dark:border-dark-border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-dark-bg text-gray-900 dark:text-dark-text">
+                                <option value="">Select a service...</option>
+                            </select>
+                            <button id="refresh-services-btn" onclick="refreshServices()"
+                                class="bg-blue-500 hover:bg-blue-600 dark:bg-blue-600 dark:hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors">
+                                Refresh
+                            </button>
+                        </div>
+
+                        <div class="flex items-center space-x-4">
+                            <button id="start-service-log-monitor-btn" onclick="startServiceLogMonitor()" disabled
+                                class="bg-purple-500 hover:bg-purple-600 dark:bg-purple-600 dark:hover:bg-purple-700 text-white px-4 py-2 rounded-lg transition-colors disabled:opacity-50">
+                                Start Log Monitor
+                            </button>
+                            <button id="stop-service-log-monitor-btn" onclick="stopServiceLogMonitor()" disabled
+                                class="bg-orange-500 hover:bg-orange-600 dark:bg-orange-600 dark:hover:bg-orange-700 text-white px-4 py-2 rounded-lg transition-colors disabled:opacity-50">
+                                Stop Log Monitor
+                            </button>
+                        </div>
+
+                        <!-- Service Logs Display -->
+                        <div id="service-logs-display" class="log-container" style="display: none;">
+                            <h4 class="text-lg font-semibold mb-2 text-gray-800 dark:text-dark-text">Service Logs</h4>
+                            <div id="service-logs-output" class="space-y-1"></div>
                         </div>
                     </div>
                 </div>
@@ -385,6 +424,19 @@
             initializeTheme();
             checkConnectionStatus();
             refreshSystemInfo();
+
+            // Set up service select change handler
+            document.getElementById('service-select').addEventListener('change', function () {
+                const hasSelection = !!this.value;
+                document.getElementById('start-service-monitor-btn').disabled = !hasSelection || serviceMonitorActive;
+                document.getElementById('start-service-log-monitor-btn').disabled = !hasSelection || serviceLogMonitorActive;
+            });
+
+            // Set up log file select change handler
+            document.getElementById('log-file-select').addEventListener('change', function () {
+                const startBtn = document.getElementById('start-tail-btn');
+                startBtn.disabled = !this.value;
+            });
         });
 
         // Tab switching functionality
@@ -534,6 +586,17 @@
                     showToast(`Stopped monitoring ${data.file_path}`, 'info');
                     updateLogTailButtons(false);
                     break;
+                case 'service_log':
+                    displayServiceLog(data);
+                    break;
+                case 'service_log_monitor_started':
+                    showToast(`Started log monitoring for ${data.service_name}`, 'success');
+                    updateServiceLogMonitorButtons(true);
+                    break;
+                case 'service_log_monitor_stopped':
+                    showToast(`Stopped log monitoring for ${data.service_name}`, 'info');
+                    updateServiceLogMonitorButtons(false);
+                    break;
             }
         }
 
@@ -626,6 +689,126 @@
             terminal.scrollTop = terminal.scrollHeight;
         }
 
+        // Service monitoring
+        function refreshServices() {
+            const select = document.getElementById('service-select');
+            const btn = document.getElementById('refresh-services-btn');
+            btn.classList.add('btn-loading');
+            btn.innerHTML = '<div class="spinner"></div><span class="btn-text">Refreshing...</span>';
+            btn.disabled = true;
+
+            fetch(`/api/servers/{{ server_name }}/services`)
+                .then(response => response.json())
+                .then(data => {
+                    const select = document.getElementById('service-select');
+                    select.innerHTML = '<option value="">Select a service...</option>';
+
+                    data.services.forEach(service => {
+                        const option = document.createElement('option');
+                        option.value = service.name;
+                        option.textContent = service.name;
+                        select.appendChild(option);
+                    });
+
+                    showToast('Service list refreshed', 'success');
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    showToast('Failed to refresh services', 'error');
+                })
+                .finally(() => {
+                    btn.classList.remove('btn-loading');
+                    btn.innerHTML = '<span class="btn-text">Refresh</span>';
+                    btn.disabled = false;
+                });
+        }
+
+        // Service monitoring variables
+        let currentMonitoredServiceLogs = null;
+        let serviceLogMonitorActive = false;
+
+        // Service log monitoring functions
+        function startServiceLogMonitor() {
+            const select = document.getElementById('service-select');
+            const serviceName = select.value;
+
+            if (!serviceName) {
+                showToast('Please select a service', 'error');
+                return;
+            }
+
+            if (!isConnected) {
+                showToast('Please connect to the server first', 'error');
+                return;
+            }
+
+            // Clear previous logs
+            document.getElementById('service-logs-output').innerHTML = '';
+            document.getElementById('service-logs-display').style.display = 'block';
+
+            // Send start command via WebSocket
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                    type: 'start_service_log_monitor',
+                    service_name: serviceName
+                }));
+
+                currentMonitoredServiceLogs = serviceName;
+                serviceLogMonitorActive = true;
+                updateServiceLogMonitorButtons(true);
+                showToast(`Started log monitoring for ${serviceName}`, 'success');
+            } else {
+                showToast('WebSocket not connected', 'error');
+            }
+        }
+
+        function stopServiceLogMonitor() {
+            if (!currentMonitoredServiceLogs) return;
+
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                    type: 'stop_service_log_monitor',
+                    service_name: currentMonitoredServiceLogs
+                }));
+
+                serviceLogMonitorActive = false;
+                updateServiceLogMonitorButtons(false);
+                showToast(`Stopped log monitoring for ${currentMonitoredServiceLogs}`, 'success');
+                currentMonitoredServiceLogs = null;
+            }
+        }
+
+        function updateServiceLogMonitorButtons(isMonitoring) {
+            document.getElementById('start-service-log-monitor-btn').disabled = isMonitoring;
+            document.getElementById('stop-service-log-monitor-btn').disabled = !isMonitoring;
+        }
+
+        function displayServiceLog(logData) {
+            const logsOutput = document.getElementById('service-logs-output');
+
+            if (logData.type === 'log_line') {
+                const timestamp = new Date().toLocaleTimeString();
+                const logEntry = document.createElement('div');
+                logEntry.className = 'text-sm font-mono text-gray-700 dark:text-dark-text';
+                logEntry.innerHTML = `<span class="text-gray-500 dark:text-dark-muted">[${timestamp}]</span> ${escapeHtml(logData.line)}`;
+                logsOutput.appendChild(logEntry);
+
+                // Scroll to bottom
+                logsOutput.scrollTop = logsOutput.scrollHeight;
+
+                // Limit number of log entries to prevent memory issues
+                const maxEntries = 500;
+                if (logsOutput.children.length > maxEntries) {
+                    logsOutput.removeChild(logsOutput.firstChild);
+                }
+            }
+        }
+
+        // Enable/disable service log monitor button based on selection
+        document.getElementById('service-select').addEventListener('change', function () {
+            document.getElementById('start-service-log-monitor-btn').disabled = !this.value;
+        });
+
         // Log monitoring
         function startLogTail() {
             const select = document.getElementById('log-file-select');
@@ -680,11 +863,6 @@
             document.getElementById('start-tail-btn').disabled = isMonitoring;
             document.getElementById('stop-tail-btn').disabled = !isMonitoring;
         }
-
-        // Enable/disable log tail button based on selection
-        document.getElementById('log-file-select').addEventListener('change', function () {
-            document.getElementById('start-tail-btn').disabled = !this.value;
-        });
 
         // Toast notifications
         function showToast(message, type = 'info') {
